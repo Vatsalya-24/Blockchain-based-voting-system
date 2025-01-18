@@ -1,6 +1,6 @@
-package com.voting.system.controller;
+package com.voting.system;
 
-import com.voting.system.service.BlockchainService;
+import com.voting.system.BlockchainService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
