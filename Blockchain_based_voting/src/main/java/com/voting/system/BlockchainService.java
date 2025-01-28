@@ -1,5 +1,7 @@
 package com.voting.system;
 
+import com.voting.system.entity.Candidate;
+import com.voting.system.repository.CandidateRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.Credentials;
@@ -14,47 +16,74 @@ import java.math.BigInteger;
 @Service
 public class BlockchainService {
 
-    private final Web3j web3j;
+    private final Web3j web3j;  
     private final String contractAddress;
     private final String privateKey;
+    private final CandidateRepository candidateRepository;
 
-    // Constructor injection for contract details
-    public BlockchainService(@Value("${ethereum.rpc.url}") String rpcUrl,
-                             @Value("${ethereum.contract.address}") String contractAddress,
-                             @Value("${ethereum.private.key}") String privateKey) {
-        this.web3j = Web3j.build(new HttpService(rpcUrl)); // Connect to Ethereum node
+    public BlockchainService(
+            @Value("${ethereum.rpc.url}") String rpcUrl,
+            @Value("${ethereum.contract.address}") String contractAddress,
+            @Value("${ethereum.private.key}") String privateKey,
+            CandidateRepository candidateRepository) {
+        this.web3j = Web3j.build(new HttpService(rpcUrl));
         this.contractAddress = contractAddress;
         this.privateKey = privateKey;
+        this.candidateRepository = candidateRepository;
     }
 
-    // Method to load the smart contract
     private Voting loadContract() {
         Credentials credentials = Credentials.create(privateKey);
-        ContractGasProvider gasProvider = new DefaultGasProvider(); // Provides default gas settings
+        ContractGasProvider gasProvider = new DefaultGasProvider();
         return Voting.load(contractAddress, web3j, credentials, gasProvider);
     }
 
-    // Method to add a candidate (requires admin rights)
     public void addCandidate(String name) throws Exception {
         Voting contract = loadContract();
-        contract.addCandidate(name).send(); // Interact with the contract to add a candidate
+        try {
+            contract.addCandidate(name).send();
+            Candidate candidate = new Candidate();
+            candidate.setName(name);
+            candidate.setVoteCount(BigInteger.ZERO); // Initialize vote count
+            candidateRepository.save(candidate);
+        } catch (Exception e) {
+            throw new Exception("Error adding candidate: " + e.getMessage(), e);
+        }
     }
 
-    // Method to cast a vote for a specific candidate
     public void voteForCandidate(int candidateId) throws Exception {
         Voting contract = loadContract();
-        contract.vote(BigInteger.valueOf(candidateId)).send(); // Vote for the candidate
+        try {
+            contract.vote(BigInteger.valueOf(candidateId)).send();
+            Candidate candidate = candidateRepository.findById((long) candidateId)
+                    .orElseThrow(() -> new Exception("Candidate not found in database"));
+            candidate.setVoteCount(candidate.getVoteCount().add(BigInteger.ONE)); // Increment vote count
+            candidateRepository.save(candidate);
+        } catch (Exception e) {
+            throw new Exception("Error voting for candidate: " + e.getMessage(), e);
+        }
     }
 
-    // Method to retrieve the vote count of a specific candidate
     public BigInteger getVoteCount(int candidateId) throws Exception {
         Voting contract = loadContract();
-        return contract.getVoteCount(BigInteger.valueOf(candidateId)).send(); // Fetch vote count
+        try {
+            BigInteger voteCount = contract.getVoteCount(BigInteger.valueOf(candidateId)).send();
+            Candidate candidate = candidateRepository.findById((long) candidateId)
+                    .orElseThrow(() -> new Exception("Candidate not found in database"));
+            candidate.setVoteCount(voteCount);
+            candidateRepository.save(candidate); // Sync database with blockchain
+            return voteCount;
+        } catch (Exception e) {
+            throw new Exception("Error retrieving vote count: " + e.getMessage(), e);
+        }
     }
 
-    // Method to get the total number of candidates
     public BigInteger getCandidatesCount() throws Exception {
         Voting contract = loadContract();
-        return contract.getCandidatesCount().send(); // Fetch total number of candidates
+        try {
+            return contract.getCandidatesCount().send();
+        } catch (Exception e) {
+            throw new Exception("Error retrieving candidates count: " + e.getMessage(), e);
+        }
     }
 }
