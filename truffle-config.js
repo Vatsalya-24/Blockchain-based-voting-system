@@ -69,7 +69,15 @@ module.exports = {
      port: 7545,            // Standard Ethereum port (default: none)
      network_id: "*",       // Any network (default: none)
     },
-    //
+    mainnet: {
+      provider: () => new HDWalletProvider(
+        process.env.MNEMONIC,    // Your wallet's mnemonic or private key
+        `https://mainnet.infura.io/v3/1e399bd1eb8e42e181afd64bc7bd7b19`  // Infura endpoint
+      ),
+      network_id: 1,         // Mainnet network id
+      gasPrice: 20000000000, // Optional: set gas price for Mainnet
+      gas: 4500000,          // Optional: set gas limit for Mainnet
+    },
     // An additional network, but with some advanced options…
     // advanced: {
     //   port: 8777,             // Custom port
